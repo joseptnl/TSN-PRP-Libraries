@@ -4,28 +4,35 @@
 
 #include "receive.h"
 
-static char if_names[N_IFS][IFNAMSIZ];
-static int n_ifs = N_IFS;
-static int frame_sz = MAX_BUF_SIZ;
 
-static int sockfd[N_IFS];
 static int configured = -1;
-
-static char *frames_buffer[N_IFS];
-static ssize_t last[N_IFS];
 static unsigned int received_frames = 0;
+static int sockopt;
+static int writer_stop_condition = 1;
 static ssize_t buff_size;
-static struct ifreq if_req[N_IFS];
-static struct sockaddr_ll addr[N_IFS];
 static socklen_t addr_size = sizeof(struct sockaddr);
 static struct timespec start;
-static unsigned int nFrames = BUFFER_FRAMES;
 static int sockopt;
 static int writer_stop_condition = 1;
 
-static sem_t mutex[N_IFS], writer_sem[N_IFS];
+static const int n_ifs = N_IFS;
+static const unsigned int nFrames = BUFFER_FRAMES;
+static const int frame_sz = MAX_BUF_SIZ;
 
-pthread_t threadId[3];
+static const unsigned int buff_ftime_offset = sizeof(struct timespec);
+static const unsigned int buff_fsize_offset = sizeof(ssize_t);
+static const unsigned int buff_fstart_offset = buff_fsize_offset + buff_ftime_offset;
+static const unsigned int buff_fcell_size = buff_fstart_offset + frame_sz;
+
+static sem_t mutex[n_ifs], writer_sem[n_ifs];
+static char if_names[n_ifs][IFNAMSIZ];
+static int sockfd[n_ifs];
+static char *frames_buffer[n_ifs];
+static ssize_t last[n_ifs];
+static struct ifreq if_req[n_ifs];
+static struct sockaddr_ll addr[n_ifs];
+
+static pthread_t threadId[3];
 
 int open_socket () {
 	sockfd[0] = socket(PF_PACKET, SOCK_RAW, htons(DEF_ETHER_TYPE));
@@ -77,16 +84,18 @@ int config_interfaces () {
 
 int configure_buffer (int if_index, int max_n_of_frames) {
 	if (max_n_of_frames < BUFFER_FRAMES) nFrames = max_n_of_frames;
-	frames_buffer[if_index] = (char *) calloc(nFrames * (frame_sz + sizeof(struct timespec)), sizeof(char)); // Allocate space for the frame buffer	
-	last[if_index] = sizeof(struct timespec);
-	buff_size = nFrames * (frame_sz + sizeof(struct timespec));
+
+	// Frame buffer topology => frame_size | arriving_time | frame
+	buff_size = nFrames * buff_fcell_size;
+	frames_buffer[if_index] = (char *) calloc(buff_size, sizeof(char)); // Allocate space for the frame buffer	
+	last[if_index] = 0;
 
 	return 0;
 }
 
 void* receiver (void* if_i) {
 	int if_index = *((int*) if_i);
-	ssize_t numbytes;
+	ssize_t *numbytes;
 	struct timespec now;
 	int f;
 
@@ -95,12 +104,17 @@ void* receiver (void* if_i) {
 	while (1) {
 		/* Save frame in buffer */
 		f = (received_frames++ % nFrames);
-		last[if_index] = ((frame_sz + sizeof(struct timespec)) * f) + sizeof(struct timespec);
-		numbytes = recvfrom(sockfd[if_index], &frames_buffer[if_index][last[if_index]], frame_sz, 0, (struct sockaddr *) &addr[if_index], (socklen_t *) &addr_size);
+		last[if_index] = f * buff_fcell_size;
 
-		/* Save time in buffer, just in front of the frame, and move pointer */
+		// Set the pointer to the next received frame bytesize place in buffer
+		numbytes = (ssize_t *) &frames_buffer[if_index][last[if_index]];
+
+		// Receive frame and storing its size into the value addresed by the pointer in the buffer
+		*numbytes = recvfrom(sockfd[if_index], &frames_buffer[if_index][last[if_index] + buff_fstart_offset], frame_sz, 0, (struct sockaddr *) &addr[if_index], (socklen_t *) &addr_size);
+
+		// Save time in buffer, just in front of the frame, and move pointer
 		clock_gettime(CLOCK_MONOTONIC, &now);
-		struct timespec *diff = (struct timespec *) &frames_buffer[if_index][last[if_index] - sizeof(struct timespec)];
+		struct timespec *diff = (struct timespec *) &frames_buffer[if_index][last[if_index] + buff_ftime_offset];
 		diff->tv_sec = now.tv_sec - start.tv_nsec;
 
 		printf("[RECEIVER] I got frame n = %d. \n", received_frames);
@@ -109,9 +123,8 @@ void* receiver (void* if_i) {
 	}
 }
 
-static void process_prp_frame (int framen, struct timespec *frame_arrival_time, uint16_t *rct_seq_num) {
-	ssize_t frame_ptr = (frame_sz + sizeof(struct timespec)) * (framen % nFrames);
-
+static void process_prp_frame (int if_index, int nframe, struct timespec *frame_arrival_time, uint16_t *rct_seq_num) {
+	ssize_t *fcell_ptr = &frames_buffer[if_index][last] buff_fcell_size * (nframe % nFrames);
 }
 
 void* writer (void* if_i) {
@@ -136,7 +149,7 @@ void* writer (void* if_i) {
 		/* Write the frame log */
 		struct timespec *frame_arrival_time;
 		uint16_t *rct_seq_num;
-		process_prp_frame(count++, frame_arrival_time, rct_seq_num);
+		process_prp_frame(if_index, count++, frame_arrival_time, rct_seq_num);
 		fprintf(file, "");
 
 		printf("[WRITER] I writed a frame n = %d. \n", count);
