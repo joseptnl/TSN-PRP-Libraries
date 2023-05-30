@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "generics.h": "c",
+        "receive.h": "c",
+        "udp.h": "c",
+        "cstdlib": "c"
+    }
+}
