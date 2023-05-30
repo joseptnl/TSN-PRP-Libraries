@@ -1,6 +1,8 @@
 # TSN-Libraries
 
-## Needed to push
+## Instructions for pushing
+
+### .gitignore
 
 For pushing into the repo make sure you have a .gitignore file with at least the following content:
 
