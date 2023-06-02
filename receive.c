@@ -4,33 +4,32 @@
 
 #include "receive.h"
 
+#define BUFF_FSIZE_OFFSET sizeof(ssize_t)
+#define BUFF_FTIME_OFFSET sizeof(struct timespec)
+#define BUFF_FSTART_OFFSET BUFF_FSIZE_OFFSET + BUFF_FTIME_OFFSET
+#define BUFF_FCELL_OFFSET BUFF_FSTART_OFFSET + MAX_BUF_SIZ
 
 static int configured = -1;
-static unsigned int received_frames = 0;
 static int sockopt;
 static int writer_stop_condition = 1;
 static ssize_t buff_size;
 static socklen_t addr_size = sizeof(struct sockaddr);
 static struct timespec start;
 static int sockopt;
-static int writer_stop_condition = 1;
 
-static const int n_ifs = N_IFS;
-static const unsigned int nFrames = BUFFER_FRAMES;
-static const int frame_sz = MAX_BUF_SIZ;
+static unsigned int n_frames = BUFFER_FRAMES;
+static const unsigned int buff_fsize_offset = BUFF_FSIZE_OFFSET;
+static const unsigned int buff_fstart_offset = BUFF_FSTART_OFFSET;
+static const unsigned int buff_fcell_offset = BUFF_FCELL_OFFSET;
+static const unsigned int buff_ftime_offset = BUFF_FTIME_OFFSET;
 
-static const unsigned int buff_ftime_offset = sizeof(struct timespec);
-static const unsigned int buff_fsize_offset = sizeof(ssize_t);
-static const unsigned int buff_fstart_offset = buff_fsize_offset + buff_ftime_offset;
-static const unsigned int buff_fcell_size = buff_fstart_offset + frame_sz;
-
-static sem_t mutex[n_ifs], writer_sem[n_ifs];
-static char if_names[n_ifs][IFNAMSIZ];
-static int sockfd[n_ifs];
-static char *frames_buffer[n_ifs];
-static ssize_t last[n_ifs];
-static struct ifreq if_req[n_ifs];
-static struct sockaddr_ll addr[n_ifs];
+static sem_t mutex[N_IFS], writer_sem[N_IFS];
+static char if_names[N_IFS][IFNAMSIZ];
+static int sockfd[N_IFS];
+static char *frames_buffer[N_IFS];
+static unsigned int last[N_IFS];
+static struct ifreq if_req[N_IFS];
+static struct sockaddr_ll addr[N_IFS];
 
 static pthread_t threadId[3];
 
@@ -83,57 +82,94 @@ int config_interfaces () {
 }
 
 int configure_buffer (int if_index, int max_n_of_frames) {
-	if (max_n_of_frames < BUFFER_FRAMES) nFrames = max_n_of_frames;
+	if (max_n_of_frames > BUFFER_FRAMES) n_frames = max_n_of_frames;
 
 	// Frame buffer topology => frame_size | arriving_time | frame
-	buff_size = nFrames * buff_fcell_size;
+	buff_size = n_frames * buff_fcell_offset;
 	frames_buffer[if_index] = (char *) calloc(buff_size, sizeof(char)); // Allocate space for the frame buffer	
 	last[if_index] = 0;
 
 	return 0;
 }
 
+// Calculates the difference between timespecs 
+int64_t diff_timespec(const struct timespec after, const struct timespec before)
+{
+    return ((int64_t)after.tv_sec - (int64_t)before.tv_sec) * (int64_t) 1000
+         + ((int64_t)after.tv_nsec - (int64_t)before.tv_nsec) / 1000000;
+}
+
 void* receiver (void* if_i) {
 	int if_index = *((int*) if_i);
+	int count = 0;
 	ssize_t *numbytes;
-	struct timespec now;
-	int f;
+	struct timespec start, now;
+	int64_t *diff;
+	int f, cell_start;
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
+	clock_gettime(CLOCK_REALTIME, &start);
 
 	while (1) {
 		/* Save frame in buffer */
-		f = (received_frames++ % nFrames);
-		last[if_index] = f * buff_fcell_size;
+		f = count % n_frames;
+		cell_start = f * buff_fcell_offset;
 
-		// Set the pointer to the next received frame bytesize place in buffer
-		numbytes = (ssize_t *) &frames_buffer[if_index][last[if_index]];
+		// Set the pointers to the next received frame bytesize and arrivaltime place in buffer
+		numbytes = (ssize_t *) &frames_buffer[if_index][cell_start];
+		diff = (int64_t *) &frames_buffer[if_index][cell_start + buff_fsize_offset];
 
 		// Receive frame and storing its size into the value addresed by the pointer in the buffer
-		*numbytes = recvfrom(sockfd[if_index], &frames_buffer[if_index][last[if_index] + buff_fstart_offset], frame_sz, 0, (struct sockaddr *) &addr[if_index], (socklen_t *) &addr_size);
+		*numbytes = recvfrom(sockfd[if_index], &frames_buffer[if_index][cell_start + buff_fstart_offset], MAX_BUF_SIZ, 0, (struct sockaddr *) &addr[if_index], (socklen_t *) &addr_size);
 
 		// Save time in buffer, just in front of the frame, and move pointer
-		clock_gettime(CLOCK_MONOTONIC, &now);
-		struct timespec *diff = (struct timespec *) &frames_buffer[if_index][last[if_index] + buff_ftime_offset];
-		diff->tv_sec = now.tv_sec - start.tv_nsec;
+		clock_gettime(CLOCK_REALTIME, &now);
+		*diff = diff_timespec(now, start);
 
-		printf("[RECEIVER] I got frame n = %d. \n", received_frames);
+		printf("[RECEIVER] %d: Size(B): %zd, Arrival time(ns): %f.\n", count, *numbytes, ((double) *diff) / 1000);
+
+		count += 1;
 
 		sem_post(&mutex[if_index]);
 	}
 }
 
-static void process_prp_frame (int if_index, int nframe, struct timespec *frame_arrival_time, uint16_t *rct_seq_num) {
-	ssize_t *fcell_ptr = &frames_buffer[if_index][last] buff_fcell_size * (nframe % nFrames);
+static void process_prp_frame (int if_index, int nframe, 
+		ssize_t *frame_size,
+		int64_t *frame_arrival_time, 
+		uint32_t *rct_seq_num,
+		char *lan_id) {
+
+	/*for (int i = ((nframe % n_frames) * buff_fcell_offset); i < BUFF_FCELL_OFFSET; i++) {
+		if ((i % 16) == 0) printf("\n");
+		printf("%hhx ", frames_buffer[if_index][i]);
+	}*/
+	// Set pointer to the start of the buffer cell
+	char *fcell_ptr = &frames_buffer[if_index][(nframe % n_frames) * buff_fcell_offset];
+	// Get frame size
+	*frame_size = *((ssize_t *) fcell_ptr);
+	// Get arrival time miliseconds
+	*frame_arrival_time = *((int64_t *)  (fcell_ptr + buff_fsize_offset));
+	// Get the seq number
+	*rct_seq_num = *((uint32_t *) (fcell_ptr + buff_fstart_offset + *frame_size - sizeof(uint32_t)));
+	// Get the lan id content
+	char lan_start = *((uint32_t *) (fcell_ptr + buff_fstart_offset + *frame_size - sizeof(uint16_t)));
+	*lan_id = (lan_start & 0xf0) >> 4;
 }
 
 void* writer (void* if_i) {
 	int if_index = *((int*) if_i);
-	int count = 0;
+	char lan;
 	FILE *file; // Log file
+	int seq_num = 0;
+	int count = 0;
+
+	ssize_t frame_size;
+	int64_t frame_arrival_time;
+	uint32_t rct_seq_num;
+	char lan_id;
 
 	// Open an erased existing file or create a new one
-	file = fopen(&if_names[if_index], "w"); // Takes the if name
+	file = fopen((const char *)&if_names[if_index], "w"); // Takes the if name
 
 	while(1) {
 		sem_wait(&mutex[if_index]);
@@ -147,12 +183,12 @@ void* writer (void* if_i) {
 		sem_post(&writer_sem[if_index]);
 
 		/* Write the frame log */
-		struct timespec *frame_arrival_time;
-		uint16_t *rct_seq_num;
-		process_prp_frame(if_index, count++, frame_arrival_time, rct_seq_num);
-		fprintf(file, "");
+		
+		// Destructure the prp frame to get rellevant data
+		process_prp_frame(if_index, count++, &frame_size, &frame_arrival_time, &rct_seq_num, &lan_id);
 
-		printf("[WRITER] I writed a frame n = %d. \n", count);
+		printf("%hhX, %zd, %f, %hd.\n", lan_id, frame_size, ((double) frame_arrival_time) / 1000, ntohs(rct_seq_num));
+		//fprintf(file, "%c, %zd, %f, %hd.\n", lan_id, frame_size, ((double) frame_arrival_time) / 1000, ntohs(rct_seq_num));
 	}
 	// Close the previously opened file
 	fclose(file);

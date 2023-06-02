@@ -57,7 +57,7 @@ static void set_rct () {
 	frame[ptr] = 0x0000;
 	ptr += 2;
 	uint16_t siz = (uint16_t) (payload_end - payload_start);
-	frame[ptr++] = siz >> 8;
+	frame[ptr++] = (siz >> 8) & 0xff;
 	frame[ptr++] = siz & 0xff;
 	real_size = ptr;
 }
@@ -65,7 +65,7 @@ static void set_rct () {
 static void update_rct_seq () {
 	seq_number += 1;
 	int ptr = payload_end;
-	frame[ptr++] = seq_number >> 8;
+	frame[ptr++] = (seq_number >> 8) & 0xff;
 	frame[ptr] = seq_number & 0xff;
 }
 

@@ -12,8 +12,8 @@
 
 #define IF_1		"enp3s0f0"
 #define IF_2		"enp3s0f1"
-#define BUFFER_FRAMES 100
-#define MAX_WAIT_TIME 60 // Seconds
+#define BUFFER_FRAMES 10
+#define MAX_WAIT_TIME 20 // Seconds
 
 static int bind_socket (int socket, struct sockaddr_ll *addr);
 int open_socket ();
