@@ -77,8 +77,8 @@ static void update_rct_lan (uint8_t lan_id) {
 }
 
 int open_socket () {
-	sockfd[0] = socket(AF_PACKET, SOCK_RAW, htons(DEF_ETHER_TYPE));
-	sockfd[1] = socket(AF_PACKET, SOCK_RAW, htons(DEF_ETHER_TYPE));
+	sockfd[0] = socket(PF_PACKET, SOCK_RAW, htons(DEF_ETHER_TYPE));
+	sockfd[1] = socket(PF_PACKET, SOCK_RAW, htons(DEF_ETHER_TYPE));
 	if (!sockfd[0] || !sockfd[1]) {
 		printf("[Open socket failed] Due to: %s \n", strerror(errno));
 		return -1;

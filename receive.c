@@ -13,7 +13,7 @@ static int configured = -1;
 static int sockopt;
 static int writer_stop_condition = 1;
 static ssize_t buff_size;
-static socklen_t addr_size = sizeof(struct sockaddr);
+static int addr_size = sizeof(struct sockaddr);
 static struct timespec start;
 static int sockopt;
 
@@ -27,16 +27,15 @@ static sem_t mutex[N_IFS], writer_sem[N_IFS];
 static char if_names[N_IFS][IFNAMSIZ];
 static int sockfd[N_IFS];
 static char *frames_buffer[N_IFS];
-static unsigned int last[N_IFS];
-static struct ifreq if_req[N_IFS];
 static struct sockaddr_ll addr[N_IFS];
+static struct ifreq ifopt;
 
 static pthread_t threadId[3];
 
 int open_socket () {
-	sockfd[0] = socket(PF_PACKET, SOCK_RAW, htons(DEF_ETHER_TYPE));
-	sockfd[1] = socket(PF_PACKET, SOCK_RAW, htons(DEF_ETHER_TYPE));
-	if (!sockfd[0] || !sockfd[1]) {
+	sockfd[0] = socket(AF_PACKET, SOCK_RAW, htons(DEF_ETHER_TYPE));
+	sockfd[1] = socket(AF_PACKET, SOCK_RAW, htons(DEF_ETHER_TYPE));
+	if (sockfd[0] < 0 || sockfd[1] < 0) {
 		printf("[Open socket failed] Due to: %s \n", strerror(errno));
 		return -1;
 	}
@@ -44,8 +43,8 @@ int open_socket () {
 }
 
 static int bind_socket (int socket, struct sockaddr_ll *addr) {
-	int res = 0;
-	if ((res = bind(socket, (struct sockaddr *) addr, sizeof(struct sockaddr_ll))) < 0) {
+	int res = 0; 	
+	if ((res = bind(socket, (struct sockaddr *) addr, sizeof(*addr))) < 0) {
         printf("[Set bind failed] Due to: %s\n", strerror(errno));
 		close(socket);
 		exit(EXIT_FAILURE);
@@ -54,8 +53,8 @@ static int bind_socket (int socket, struct sockaddr_ll *addr) {
 }
 
 int config_interfaces () {
-	if (sockfd[0] < 0) {
-		printf("Socked not opened\n");
+	if (sockfd[0] < 0 || sockfd[1] < 0) {
+		printf("Socket not opened\n");
 		return -1;
 	} 
 
@@ -72,6 +71,16 @@ int config_interfaces () {
     addr[1].sll_protocol = htons(DEF_ETHER_TYPE);
     addr[1].sll_ifindex = if_nametoindex(if_names[1]);
 
+	strncpy(ifopt.ifr_name, if_names[0], IFNAMSIZ-1);
+	ioctl(sockfd[0], SIOCGIFFLAGS, &ifopt);
+	ifopt.ifr_flags |= IFF_PROMISC;
+	ioctl(sockfd[0], SIOCSIFFLAGS, &ifopt);
+
+	strncpy(ifopt.ifr_name, if_names[1], IFNAMSIZ-1);
+	ioctl(sockfd[1], SIOCGIFFLAGS, &ifopt);
+	ifopt.ifr_flags |= IFF_PROMISC;
+	ioctl(sockfd[1], SIOCSIFFLAGS, &ifopt);
+
 	// Bind the interfaces with the opened sockets
 	if (bind_socket(sockfd[0], &addr[0]) < 0) return -1;
 	if (bind_socket(sockfd[1], &addr[1]) < 0) return -1;
@@ -82,23 +91,27 @@ int config_interfaces () {
 }
 
 int configure_buffer (int if_index, int max_n_of_frames) {
+	if (configured < 0) {
+		printf("Sockets haven't been configured.\n");
+		return -1;
+	} 
+
 	if (max_n_of_frames > BUFFER_FRAMES) n_frames = max_n_of_frames;
 
 	// Frame buffer topology => frame_size | arriving_time | frame
 	buff_size = n_frames * buff_fcell_offset;
 	frames_buffer[if_index] = (char *) calloc(buff_size, sizeof(char)); // Allocate space for the frame buffer	
-	last[if_index] = 0;
 
 	return 0;
 }
 
-// Calculates the difference between timespecs 
+// Calculates the difference between timespecs (miliseconds)
 int64_t diff_timespec(const struct timespec after, const struct timespec before)
 {
     return ((int64_t)after.tv_sec - (int64_t)before.tv_sec) * (int64_t) 1000
          + ((int64_t)after.tv_nsec - (int64_t)before.tv_nsec) / 1000000;
 }
-
+ 
 void* receiver (void* if_i) {
 	int if_index = *((int*) if_i);
 	int count = 0;
@@ -111,7 +124,7 @@ void* receiver (void* if_i) {
 
 	while (1) {
 		/* Save frame in buffer */
-		f = count % n_frames;
+		f = count++ % n_frames;
 		cell_start = f * buff_fcell_offset;
 
 		// Set the pointers to the next received frame bytesize and arrivaltime place in buffer
@@ -125,9 +138,7 @@ void* receiver (void* if_i) {
 		clock_gettime(CLOCK_REALTIME, &now);
 		*diff = diff_timespec(now, start);
 
-		printf("[RECEIVER] %d: Size(B): %zd, Arrival time(ns): %f.\n", count, *numbytes, ((double) *diff) / 1000);
-
-		count += 1;
+		printf("[RECEIVER] %d: Size: %zd, Arrival time: %f.\n", count, *numbytes, ((double) *diff) / 1000);
 
 		sem_post(&mutex[if_index]);
 	}
@@ -138,11 +149,6 @@ static void process_prp_frame (int if_index, int nframe,
 		int64_t *frame_arrival_time, 
 		uint32_t *rct_seq_num,
 		char *lan_id) {
-
-	/*for (int i = ((nframe % n_frames) * buff_fcell_offset); i < BUFF_FCELL_OFFSET; i++) {
-		if ((i % 16) == 0) printf("\n");
-		printf("%hhx ", frames_buffer[if_index][i]);
-	}*/
 	// Set pointer to the start of the buffer cell
 	char *fcell_ptr = &frames_buffer[if_index][(nframe % n_frames) * buff_fcell_offset];
 	// Get frame size
@@ -187,8 +193,9 @@ void* writer (void* if_i) {
 		// Destructure the prp frame to get rellevant data
 		process_prp_frame(if_index, count++, &frame_size, &frame_arrival_time, &rct_seq_num, &lan_id);
 
-		printf("%hhX, %zd, %f, %hd.\n", lan_id, frame_size, ((double) frame_arrival_time) / 1000, ntohs(rct_seq_num));
-		//fprintf(file, "%c, %zd, %f, %hd.\n", lan_id, frame_size, ((double) frame_arrival_time) / 1000, ntohs(rct_seq_num));
+		printf("[WRITER] Lan: %hhX, Size: %zd, Arrival time: %f, Seq Num: %hd.\n", lan_id, frame_size, ((double) frame_arrival_time) / 1000, ntohs(rct_seq_num));
+		// Write into file
+		fprintf(file, "%hhX, %zd, %f, %hd\n", lan_id, frame_size, ((double) frame_arrival_time) / 1000, ntohs(rct_seq_num));
 	}
 	// Close the previously opened file
 	fclose(file);
