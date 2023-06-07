@@ -5,13 +5,16 @@ all:
 	make $(SEND_TEST_TARG)
 	make $(RECEIVE_TEST_TARG)
 
-$(SEND_TEST_TARG): send.o generics.o sendtest.o
+$(SEND_TEST_TARG): send.o generics.o prpsend.o sendtest.o
 	gcc $^ -o $@
 	
 sendtest.o: sendtest.c send.h
 	gcc -c -o $@ $<
 
 send.o: send.c send.h
+	gcc -c -o $@ $<
+
+prpsend.o: prpsend.c prpsend.h
 	gcc -c -o $@ $<
 
 $(RECEIVE_TEST_TARG): receive.o generics.o receivetest.o

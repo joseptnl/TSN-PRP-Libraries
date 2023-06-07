@@ -11,6 +11,7 @@
 #include <linux/if_packet.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <unistd.h>
 
 /* Multicast address */
 #define MY_DEST_MAC0	0x01 
@@ -29,3 +30,7 @@
 #define RCT_SIZE    4
 
 #define BILLION 	1000000000L
+
+int open_socket ();
+int bind_socket (int socket, struct sockaddr_ll *addr);
+int control_socket (int socket, unsigned long request, char *if_name, struct ifreq *if_req);
