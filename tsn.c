@@ -1,46 +1,15 @@
-#include "prpsend.h"
+#include "tsn.h"
 
-void set_rct (char *frame, unsigned int ptr, unsigned int payload_size) {
-    uint16_t siz = (uint16_t) payload_size;
-	frame[ptr++] = 0x00;
-    frame[ptr++] = 0x00;
-	frame[ptr++] = (siz >> 8) & 0xff;
-	frame[ptr++] = siz & 0xff;
-}
-
-void update_rct_seq (int seq_number, char *frame, int ptr) {
-	frame[ptr++] = (seq_number >> 8) & 0xff;
-	frame[ptr] = seq_number & 0xff;
-}
-
-void set_rct_lan (char lan_id, char *frame, int ptr) {
-	ptr += 2;
-    uint8_t id = (uint8_t) lan_id;
-	frame[ptr] &= 0x0f;
-	frame[ptr] |= lan_id;
-}
-
-int check_macs (char *ifmac1, char *ifmac2) {
-    /* Check interfaces MAC address*/
-	for (int i = 0; i < 6; i++) {
-		if (ifmac1[i] != ifmac2[i]) {
-			printf("The interfaces don't have the same mac addr., check config. \n");
-			return -1;
-		}
-	}
-    return 0;
-}
-
-char *craft_prp_frame (
+static char *craft_tsn_frame(
     uint16_t eth_type,
 	unsigned char *src_mac,
     unsigned char *dst_mac,
+    uint8_t priority,
 	char *payload, 
-	unsigned int payload_size, 
-	char lan,
-    unsigned int *rct_ptr,
-    unsigned int *frame_size
-) {
+	uint16_t payload_size,
+    uint16_t *rct_ptr,
+    uint16_t *frame_size) 
+{
     if (payload_size > MAX_PAYLOAD_SIZ - RCT_SIZE) payload_size = MAX_FRAME_SIZ - RCT_SIZE;
     if (payload_size < MIN_PAYLOAD_SIZ) {
         printf("[Error when crafting frame] Payload isn't big enough.\n");
@@ -49,7 +18,7 @@ char *craft_prp_frame (
     }
 
 	char *frame = (char *) calloc(MAX_FRAME_SIZ, sizeof(char)); // Allocate space for the frame buffer
-	int tx_len = 0;
+	uint16_t tx_len = 0;
 
 	struct ether_header *eh = (struct ether_header *) frame; // Eth struct header startint at the first of the buff.
 
@@ -70,8 +39,14 @@ char *craft_prp_frame (
 	eh->ether_dhost[4] = (uint8_t) *(dst_mac + 4);
 	eh->ether_dhost[5] = (uint8_t) *(dst_mac + 5);
 
-	// Ethertype field 
-	eh->ether_type = htons(eth_type);
+	// 802.1 C tag
+	eh->ether_type = htons(0x8100);
+    frame[tx_len++] = priority << 5;
+	frame[tx_len++] = 0x01;
+
+    // Ethertype field
+	frame[tx_len++] = eth_type >> 8;
+	frame[tx_len++] = eth_type & 0xff;
 
 	tx_len += sizeof(struct ether_header);
 
@@ -80,9 +55,6 @@ char *craft_prp_frame (
 	}
 
     *rct_ptr = tx_len;
-
-	set_rct(frame, tx_len, payload_size);
-	set_rct_lan(lan, frame, tx_len);
 
     *frame_size = tx_len + RCT_SIZE;
 

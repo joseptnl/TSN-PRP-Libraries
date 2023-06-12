@@ -2,7 +2,7 @@
  *  Author: Josep Antoni Naranjo Llompart
  */
 
-#include "receive.h"
+#include "prpreceive.h"
 
 #define BUFF_FSIZE_OFFSET sizeof(ssize_t)
 #define BUFF_FTIME_OFFSET sizeof(struct timespec)
@@ -104,7 +104,7 @@ static void* receiver () {
 		diff = (int64_t *) &frames_buffer[cell_start + buff_fsize_offset];
 
 		// Receive frame and storing its size into the value addresed by the pointer in the buffer
-		*numbytes = recvfrom(sockfd, &frames_buffer[cell_start + buff_fstart_offset], MAX_BUF_SIZ, 0, (struct sockaddr *) &addr, (socklen_t *) &addr_size);
+		*numbytes = recv(sockfd, &frames_buffer[cell_start + buff_fstart_offset], MAX_BUF_SIZ, 0);
 
 		// Save time in buffer, just in front of the frame, and move pointer
 		clock_gettime(CLOCK_REALTIME, &now);
