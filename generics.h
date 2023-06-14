@@ -33,4 +33,4 @@
 
 int open_socket ();
 int bind_socket (int socket, struct sockaddr_ll *addr);
-int control_socket (int socket, unsigned long request, char *if_name, struct ifreq *if_req);
+int control_socket (int socket, unsigned long request, struct ifreq *if_req);

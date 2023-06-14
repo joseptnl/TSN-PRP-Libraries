@@ -3,7 +3,7 @@
 
 #include <limits.h>
 
-int open_connection ();
-int send_config_interface (char *if_name, int sockfd, unsigned char *src_mac, uint16_t eth_type);
-int receive_config_interface (char *if_name, int sockfd, uint16_t eth_type);
-int send_frame (int sockfd, char *frame, int frame_len);
+int init_interface (char *if_name, uint16_t eth_type, unsigned char *src_mac);
+int end_interface (int sockfd);
+uint64_t send_frame (int sockfd, char *frame, uint16_t frame_len);
+uint64_t receive_frame (int sockfd, char *rec_buffer, uint16_t frame_len);

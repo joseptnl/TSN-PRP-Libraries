@@ -43,10 +43,10 @@ int bind_socket (int socket, struct sockaddr_ll *addr) {
  * 
  * Returns >0 if success or -1 if failure.
 */
-int control_socket (int socket, unsigned long request, char *if_name, struct ifreq *if_req) {
+int control_socket (int socket, unsigned long request, struct ifreq *if_req) {
 	int res = 0;
 	if ((res = ioctl(socket, request, if_req)) < 0) {
-	    printf("[Get interface data failed] Interface: %s, Request: %lu, Due to: %s \n", if_name, request, strerror(errno));
+	    printf("[Get interface data failed] Socket: %d, Request: %lu, Due to: %s \n", socket, request, strerror(errno));
 	}
 	return res;
 }

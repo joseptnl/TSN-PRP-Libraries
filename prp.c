@@ -1,22 +1,14 @@
 #include "prp.h"
 
-struct if_sdata
+struct if_data
 {
 	int sockfd;
 	char src_mac[6];
-	char *frame;
 };
 
-struct if_rdata
-{
-	int sockfd;
-	char *frame;
-};
-
-static struct if_sdata if_send_data[N_IFS];
-static struct if_rdata if_rec_data[N_IFS];
-static pthread_t threadId[N_IFS];
-static uint16_t rct_ptr, frame_size, seq_num = 0;
+static struct if_data if_init_data[N_IFS];
+static uint16_t seq_num = 0;
+static sem_t seq_num_mtx;
 
 static void set_rct (char *frame, unsigned int ptr, unsigned int payload_size) {
     uint16_t siz = (uint16_t) payload_size;
@@ -105,54 +97,47 @@ static char *craft_prp_frame (
 	return frame;
 }
 
-static void* if_send_frame (void *args) {
-	uint8_t if_idx = *((uint8_t *)args);
-	uint8_t lan = *((uint8_t *)args + 1);
-
-	set_rct_lan(lan, if_send_data[if_idx].frame, rct_ptr);
-	send_frame(if_send_data[if_idx].sockfd, if_send_data[if_idx].frame, frame_size);
+void prpInit () {
+	sem_init(&seq_num_mtx, 0, 1);
 }
 
-uint8_t prpConfigSendingIfs (char **if_name_list) {
-	printf("%s\n", if_name_list[0]);
-	printf("%s\n", if_name_list[1]);
+uint8_t prpConfig (char **if_name_list) {
 	for (int i = 0; i < N_IFS; i++) {
-		if ((if_send_data[i].sockfd = open_connection()) < 0) return OPEN_CONNEC_ERR;
-		if(send_config_interface(if_name_list[i], if_send_data[i].sockfd, if_send_data[i].src_mac, ETH_P_ALL) < 0) return SEND_CONF_IF_ERR;
+		if(if_init_data[i].sockfd = init_interface(if_name_list[i], ETH_P_ALL, if_init_data[i].src_mac) < 0) return INIT_SENDING_IF_ERR;
 	}
 
-	if (check_macs(if_send_data[0].src_mac, if_send_data[1].src_mac) < 0) return DIFF_MACS_ERR;
+	if (check_macs(if_init_data[0].src_mac, if_init_data[1].src_mac) < 0) return DIFF_MACS_ERR;
 
 	return SUCCESS;
 }
 
 uint8_t prpSendFrame (uint16_t eth_t, char *dst_mac, char *data, uint16_t data_size) {
+	uint16_t rct_ptr, frame_size;
+
 	// Create frame
-	if_send_data[0].frame = craft_prp_frame(eth_t, if_send_data[0].src_mac, dst_mac, data, data_size, &rct_ptr, &frame_size);
-	update_rct_seq (seq_num++, if_send_data[0].frame, rct_ptr);
-	if_send_data[1].frame = (char *) calloc(frame_size, sizeof(char));
-	memcpy(if_send_data[1].frame, if_send_data[0].frame, frame_size);
+	char *frame = craft_prp_frame(eth_t, if_init_data[0].src_mac, dst_mac, data, data_size, &rct_ptr, &frame_size);
 
-	uint8_t args1[2];
-	args1[0] = 0;
-	args1[1] = 0xA0;
-	uint8_t args2[2];
-	args2[0] = 1;
-	args2[1] = 0xB0;
+	if (frame_size == 0) return -1;
 
-	pthread_create(&threadId[0], NULL, &if_send_frame, args1);
-	pthread_create(&threadId[1], NULL, &if_send_frame, args2);
+	update_rct_seq (seq_num, frame, rct_ptr);
 
-	pthread_join(threadId[0], NULL);
-	pthread_join(threadId[1], NULL);
+	sem_wait(&seq_num_mtx);
+	seq_num += 1;
+	sem_post(&seq_num_mtx);
 
-	free(if_send_data[0].frame);
-	free(if_send_data[1].frame);
+	set_rct_lan(0xA0, frame, rct_ptr);
+	if (send_frame(if_init_data[0].sockfd, frame, frame_size) < 0) return -1;
+	set_rct_lan(0xB0, frame, rct_ptr);
+	if (send_frame(if_init_data[1].sockfd, frame, frame_size) < 0) return -1;
+
+	free(frame);
 
 	return SUCCESS;
 }
 
 uint8_t prpEnd () {
-	close(if_send_data[0].sockfd);
-	close(if_send_data[1].sockfd);
+	if (end_interface(if_init_data[0].sockfd) < 0) return -1;
+	if (end_interface(if_init_data[1].sockfd) < 0) return -1;
+
+	return 0;
 }

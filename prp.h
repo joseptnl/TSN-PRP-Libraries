@@ -6,8 +6,7 @@
 #include <semaphore.h>
 
 #define SUCCESS 0
-#define OPEN_CONNEC_ERR -1
-#define SEND_CONF_IF_ERR -2
+#define INIT_SENDING_IF_ERR -2
 #define DIFF_MACS_ERR -3
 
 #define N_IFS 2
@@ -28,7 +27,8 @@ static int check_macs (char *ifmac1, char *ifmac2);
 static void set_rct_lan (char lan_id, char *frame, int ptr);
 static void update_rct_seq (int seq_number, char *frame, int ptr);
 static void set_rct (char *frame, unsigned int ptr, unsigned int payload_size);
-static void* if_send_frame (void *args);
-uint8_t prpConfigSendingIfs (char **if_name_list);
+
+void prpInit ();
+uint8_t prpConfig (char **if_name_list);
 uint8_t prpSendFrame (uint16_t eth_t, char *dst_mac, char *data, uint16_t data_size);
-uint8_t prpSendingEnd ();
+uint8_t prpEnd ();
