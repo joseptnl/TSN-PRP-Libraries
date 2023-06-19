@@ -7,7 +7,7 @@ struct if_data
 };
 
 static struct if_data if_init_data[N_IFS];
-static uint16_t seq_num = 0;
+static uint16_t seq_num;
 static sem_t seq_num_mtx;
 
 static void set_rct (char *frame, unsigned int ptr, unsigned int payload_size) {
@@ -57,32 +57,10 @@ static char *craft_prp_frame (
         return (char *) 0;
     }
 
-	char *frame = (char *) calloc(MAX_FRAME_SIZ, sizeof(char)); // Allocate space for the frame buffer
-	uint16_t tx_len = 0;
-
-	struct ether_header *eh = (struct ether_header *) frame; // Eth struct header startint at the first of the buff.
-
-	// Build the Ethernet header
-	// Source mac addr */
-	eh->ether_shost[0] = (uint8_t) *(src_mac);
-	eh->ether_shost[1] = (uint8_t) *(src_mac + 1);
-	eh->ether_shost[2] = (uint8_t) *(src_mac + 2);
-	eh->ether_shost[3] = (uint8_t) *(src_mac + 3);
-	eh->ether_shost[4] = (uint8_t) *(src_mac + 4);
-	eh->ether_shost[5] = (uint8_t) *(src_mac + 5);
-
-	// Destination mac addr
-	eh->ether_dhost[0] = (uint8_t) *(dst_mac);
-	eh->ether_dhost[1] = (uint8_t) *(dst_mac + 1);
-	eh->ether_dhost[2] = (uint8_t) *(dst_mac + 2);
-	eh->ether_dhost[3] = (uint8_t) *(dst_mac + 3);
-	eh->ether_dhost[4] = (uint8_t) *(dst_mac + 4);
-	eh->ether_dhost[5] = (uint8_t) *(dst_mac + 5);
+	char *frame = ethernet_frame(dst_mac, src_mac, MAX_FRAME_SIZ);
 
 	// Ethertype field 
-	eh->ether_type = htons(eth_type);
-
-	tx_len += sizeof(struct ether_header);
+	uint16_t tx_len = add_type(frame, MAC_ADDR_SIZE * 2, eth_type);
 
 	for (int i = 0; i < payload_size; i++) {
 		frame[tx_len++] = payload[i];
@@ -98,12 +76,13 @@ static char *craft_prp_frame (
 }
 
 void prpInit () {
+	seq_num = 0;
 	sem_init(&seq_num_mtx, 0, 1);
 }
 
 uint8_t prpConfig (char **if_name_list) {
 	for (int i = 0; i < N_IFS; i++) {
-		if(if_init_data[i].sockfd = init_interface(if_name_list[i], ETH_P_ALL, if_init_data[i].src_mac) < 0) return INIT_SENDING_IF_ERR;
+		if((if_init_data[i].sockfd = init_interface(if_name_list[i], ETH_P_ALL, if_init_data[i].src_mac)) < 0) return INIT_IF_ERR;
 	}
 
 	if (check_macs(if_init_data[0].src_mac, if_init_data[1].src_mac) < 0) return DIFF_MACS_ERR;

@@ -1,5 +1,5 @@
 
-#include "generics.h"
+#include "packetio.h"
 
 #include <linux/ip.h>
 #include <linux/udp.h>
@@ -9,13 +9,11 @@
 #include <pthread.h>
 #include <sys/sem.h>
 
-#define IF_1		"enp3s0f0"
-#define IF_2		"enp3s0f1"
 #define BUFFER_FRAMES 10
 #define MAX_WAIT_TIME 60 // Seconds
 
 int open_connection ();
-int config_interface (int if_index);
+int config_interface (char *if_name);
 int configure_buffer (int max_n_of_frames);
 void log_init ();
 

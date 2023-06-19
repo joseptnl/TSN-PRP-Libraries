@@ -1,62 +1,116 @@
 #include "tsn.h"
 
-static char *craft_tsn_frame(
-    uint16_t eth_type,
-	unsigned char *src_mac,
-    unsigned char *dst_mac,
-    uint8_t priority,
-	char *payload, 
-	uint16_t payload_size,
-    uint16_t *rct_ptr,
-    uint16_t *frame_size) 
+struct if_data
 {
-    if (payload_size > MAX_PAYLOAD_SIZ - RCT_SIZE) payload_size = MAX_FRAME_SIZ - RCT_SIZE;
-    if (payload_size < MIN_PAYLOAD_SIZ) {
+	int sockfd;
+	char src_mac[6];
+	char *frame;
+	char *name;
+};
+
+static struct if_data *if_init_data;
+static uint16_t seq_num;
+static uint8_t n_ifs;
+static sem_t seq_num_mtx;
+
+static char *craft_tsn_frame(
+	uint8_t frer,
+    uint16_t eth_type,
+	unsigned char *dst_mac,
+	unsigned char *src_mac,
+    uint8_t priority,
+	uint8_t dei,
+	uint16_t vlan,
+	uint16_t seq_num,
+	char *payload,
+	uint16_t payload_size,
+    uint16_t *frame_size)
+{
+	if (payload_size < MIN_PAYLOAD_SIZ) {
         printf("[Error when crafting frame] Payload isn't big enough.\n");
         *frame_size = 0;
         return (char *) 0;
     }
 
-	char *frame = (char *) calloc(MAX_FRAME_SIZ, sizeof(char)); // Allocate space for the frame buffer
-	uint16_t tx_len = 0;
+	char *frame = ethernet_frame(dst_mac, src_mac, frer > 0 ? FRER_MAX_FRAME_SIZ : TSN_MAX_FRAME_SIZ);
 
-	struct ether_header *eh = (struct ether_header *) frame; // Eth struct header startint at the first of the buff.
+	// Ethertype field 
+	*frame_size = add_vlan_tag(frame, MAC_ADDR_SIZE * 2, priority,  dei, vlan);
 
-	// Build the Ethernet header
-	// Source mac addr */
-	eh->ether_shost[0] = (uint8_t) *(src_mac);
-	eh->ether_shost[1] = (uint8_t) *(src_mac + 1);
-	eh->ether_shost[2] = (uint8_t) *(src_mac + 2);
-	eh->ether_shost[3] = (uint8_t) *(src_mac + 3);
-	eh->ether_shost[4] = (uint8_t) *(src_mac + 4);
-	eh->ether_shost[5] = (uint8_t) *(src_mac + 5);
+	if (frer > 0) {
+		if (payload_size > FRER_MAX_PAYLOAD_SIZ) payload_size = FRER_MAX_PAYLOAD_SIZ;
 
-	// Destination mac addr
-	eh->ether_dhost[0] = (uint8_t) *(dst_mac);
-	eh->ether_dhost[1] = (uint8_t) *(dst_mac + 1);
-	eh->ether_dhost[2] = (uint8_t) *(dst_mac + 2);
-	eh->ether_dhost[3] = (uint8_t) *(dst_mac + 3);
-	eh->ether_dhost[4] = (uint8_t) *(dst_mac + 4);
-	eh->ether_dhost[5] = (uint8_t) *(dst_mac + 5);
-
-	// 802.1 C tag
-	eh->ether_type = htons(0x8100);
-    frame[tx_len++] = priority << 5;
-	frame[tx_len++] = 0x01;
-
-    // Ethertype field
-	frame[tx_len++] = eth_type >> 8;
-	frame[tx_len++] = eth_type & 0xff;
-
-	tx_len += sizeof(struct ether_header);
-
-	for (int i = 0; i < payload_size; i++) {
-		frame[tx_len++] = payload[i];
+		*frame_size = add_r_tag(frame, *frame_size, seq_num);
+	} else {
+		if (payload_size > TSN_MAX_PAYLOAD_SIZ) payload_size = TSN_MAX_PAYLOAD_SIZ;
 	}
 
-    *rct_ptr = tx_len;
+	// Ethertype field 
+	*frame_size = add_type(frame, *frame_size, eth_type);
 
-    *frame_size = tx_len + RCT_SIZE;
+	for (int i = 0; i < payload_size; i++) {
+		frame[(*frame_size)++] = payload[i];
+	}
 
 	return frame;
+}
+
+void tsnInit () {
+	seq_num = 0;
+	sem_init(&seq_num_mtx, 0, 1);
+}
+
+uint8_t tsnConfig (char **if_name_list, uint8_t ifs_num) {
+	n_ifs = ifs_num;
+	if_init_data = (struct if_data *) calloc(ifs_num, sizeof(struct if_data));
+
+	for (int i = 0; i < n_ifs; i++) {
+		if((if_init_data[i].sockfd = init_interface(if_name_list[i], ETH_P_ALL, if_init_data[i].src_mac)) < 0) return INIT_IF_ERR;
+		if_init_data[i].name = (char *) calloc(IFNAMSIZ-1, 1);
+		strncpy(if_init_data[i].name, if_name_list[i], IFNAMSIZ-1);
+	}
+
+	return SUCCESS;
+}
+
+uint8_t tsnSendFrame (uint8_t frer, uint16_t eth_t, char *dst_mac, uint8_t priority, char *data, uint16_t data_size) {
+	uint16_t frame_size;
+
+	// Create frame
+	/**
+	 * NOTE:
+	 * 
+	 * The DEI and VLAN fields have been set statically because
+	 * I don't need them to be configurable for my project purposes.
+	*/
+	for (int i = 0; i < n_ifs; i++) {
+		if_init_data[i].frame = craft_tsn_frame(frer, eth_t, dst_mac, if_init_data[i].src_mac, priority, 0, 1, seq_num, data, data_size, &frame_size);
+		if (frame_size == 0) return -1;
+	}
+
+	if (frer > 0) {
+		sem_wait(&seq_num_mtx);
+		seq_num += 1;
+		sem_post(&seq_num_mtx);
+	}
+
+	for (int i = 0; i < n_ifs; i++) {
+		if (send_frame(if_init_data[i].sockfd, if_init_data[i].frame, frame_size) < 0) return -1;
+	}
+
+	for (int i = 0; i < n_ifs; i++) {
+		free(if_init_data[i].frame);
+	}
+
+	return SUCCESS;
+}
+
+uint8_t tsnEnd () {
+	free(if_init_data);
+
+	for (int i = 0; i < n_ifs; i++) {
+		if (end_interface(if_init_data[i].sockfd, if_init_data[i].name) < 0) return -1;
+	}
+
+	return 0;
 }

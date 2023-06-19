@@ -1,12 +1,13 @@
 
 #include "packetio.h"
+#include "ethframes.h"
 
 #include <pthread.h>
 #include <sys/sem.h>
 #include <semaphore.h>
 
 #define SUCCESS 0
-#define INIT_SENDING_IF_ERR -2
+#define INIT_IF_ERR -2
 #define DIFF_MACS_ERR -3
 
 #define N_IFS 2

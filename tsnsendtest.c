@@ -1,5 +1,5 @@
 
-#include "prp.h"
+#include "tsn.h"
 
 #include <unistd.h> /* For usleep */
 #include <getopt.h>
@@ -33,9 +33,9 @@ int main (int argc, char *argv[]) {
 	strcpy(ifname[0], IF_1);
 	strcpy(ifname[1], IF_2);
 
-	prpInit();
+	tsnInit();
 
-	if (prpConfig(ifname)) return -1;
+	if (tsnConfig(ifname, 2)) return -1;
 
 	ifdstmac[0] = MY_DEST_MAC0;
 	ifdstmac[1] = MY_DEST_MAC1;
@@ -45,11 +45,11 @@ int main (int argc, char *argv[]) {
 	ifdstmac[5] = MY_DEST_MAC5;
 
 	for (int i = 0; i < NFRAMES; i++) {
-		prpSendFrame(0x8000, ifdstmac, content, 700);
+		tsnSendFrame(1, 0x8000, ifdstmac, 5, content, 700);
 		usleep(SLEEP);
 	}
 
-	prpEnd();
+	tsnEnd();
 
 	return 0;
 }

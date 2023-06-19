@@ -6,7 +6,7 @@
  * Returns its index if success or -1 if failure.
 */
 int open_socket () {
-	int sockfd = socket(AF_PACKET, SOCK_RAW, htons(DEF_ETHER_TYPE));
+	int sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 	if (sockfd < 0) {
 		printf("[Open socket failed] Due to: %s \n", strerror(errno));
 		return -1;

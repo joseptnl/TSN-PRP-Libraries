@@ -1,6 +1,7 @@
-/*
- *  Author: Josep Antoni Naranjo Llompart
- */
+/**
+ * Auxiliar program to make a log with all the messages received
+ * through a concrete interface.
+*/
 
 #include "prpreceive.h"
 
@@ -27,40 +28,17 @@ static sem_t mutex, writer_sem;
 static char if_name[IFNAMSIZ];
 static int sockfd;
 static char *frames_buffer;
-static struct sockaddr_ll addr;
-static struct ifreq ifopt;
 
 static pthread_t threadId[3];
 
-int open_connection () {
-	sockfd = open_socket();
-}
+int config_interface (char *if_nam) {
+	strncpy(if_name, if_nam, IFNAMSIZ-1);
 
-int config_interface (int if_index) {
-	if (sockfd < 0) {
-		printf("Socket not opened\n");
-		return -1;
-	} 
+	if((sockfd = init_interface(if_name, DEF_ETHER_TYPE, NULL)) < 0) return -1;
 
-	strcpy(if_name, if_index == 0 ? IF_1 : IF_2);
+	configured = 1;
 
-	memset(&addr, 0, sizeof(struct sockaddr_ll));
-
-	addr.sll_family = AF_PACKET;
-    addr.sll_protocol = htons(DEF_ETHER_TYPE);
-    addr.sll_ifindex = if_nametoindex(if_name);
-
-	strncpy(ifopt.ifr_name, if_name, IFNAMSIZ-1);
-	ioctl(sockfd, SIOCGIFFLAGS, &ifopt);
-	ifopt.ifr_flags |= IFF_PROMISC;
-	ioctl(sockfd, SIOCSIFFLAGS, &ifopt);
-
-	// Bind the interfaces with the opened sockets
-	if (bind_socket(sockfd, &addr) < 0) return -1;
-
-	configured = 0;
-
-	return configured;
+	return 0;
 }
 
 int configure_buffer (int max_n_of_frames) {
@@ -81,8 +59,8 @@ int configure_buffer (int max_n_of_frames) {
 // Calculates the difference between timespecs (miliseconds)
 static int64_t diff_timespec(const struct timespec after, const struct timespec before)
 {
-    return ((int64_t)after.tv_sec - (int64_t)before.tv_sec) * (int64_t) 1000
-         + ((int64_t)after.tv_nsec - (int64_t)before.tv_nsec) / 1000000;
+    return ((int64_t)after.tv_sec - (int64_t)before.tv_sec) * (int64_t) 1000000
+         + ((int64_t)after.tv_nsec - (int64_t)before.tv_nsec) / 1000;
 }
  
 static void* receiver () {
@@ -104,7 +82,7 @@ static void* receiver () {
 		diff = (int64_t *) &frames_buffer[cell_start + buff_fsize_offset];
 
 		// Receive frame and storing its size into the value addresed by the pointer in the buffer
-		*numbytes = recv(sockfd, &frames_buffer[cell_start + buff_fstart_offset], MAX_BUF_SIZ, 0);
+		*numbytes = receive_frame(sockfd, &frames_buffer[cell_start + buff_fstart_offset], MAX_BUF_SIZ);
 
 		// Save time in buffer, just in front of the frame, and move pointer
 		clock_gettime(CLOCK_REALTIME, &now);

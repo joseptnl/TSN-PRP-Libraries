@@ -23,12 +23,6 @@
 
 #define DEF_ETHER_TYPE	0x8000
 
-#define N_IFS		2
-#define MAX_BUF_SIZ	1514  // Frame size (without CRC)
-#define MAX_PAYLOAD_SIZ	1500  // Frame size (without CRC)
-#define MIN_PAYLOAD_SIZ 64
-#define RCT_SIZE    4
-
 #define BILLION 	1000000000L
 
 int open_socket ();

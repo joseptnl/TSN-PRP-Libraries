@@ -26,23 +26,27 @@ int init_interface (char *if_name, uint16_t eth_type, unsigned char *src_mac) {
 	socket_address.sll_family = AF_PACKET;
     socket_address.sll_protocol = htons(eth_type);
     socket_address.sll_ifindex = if_nametoindex(if_name);
-
-	// Set promiscuos mode
-	struct ifreq promisc_req;
-	if(control_socket(socket, SIOCGIFFLAGS, &promisc_req) < 0) return -1;
-	promisc_req.ifr_flags |= IFF_PROMISC;
-	if(control_socket(socket, SIOCSIFFLAGS, &promisc_req) < 0) return -1;
-
 	// Bind the interfaces with the opened sockets
 	if (bind_socket(socket, &socket_address) < 0) return -1;
+	
+	// Set promiscuos mode
+	struct ifreq ifr;
+	strncpy(ifr.ifr_name, if_name, IFNAMSIZ-1);
+	if(control_socket(socket, SIOCGIFFLAGS, &ifr) < 0) return -1;
+	ifr.ifr_flags |= IFF_PROMISC;
+	if(control_socket(socket, SIOCSIFFLAGS, &ifr) < 0) return -1;
 
-	// Get the MAC address
-	struct ifreq if_mac;
-	memset(&if_mac, 0, sizeof(struct ifreq));
-	if (control_socket(socket, SIOCGIFHWADDR, &if_mac) < 0) return -1;
+	// Set reusable socket
+	uint8_t true = 1;
+	setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &true, sizeof(uint8_t));
 
-	for (int i = 0; i < 6; i++) {
-		*(src_mac + i) = if_mac.ifr_hwaddr.sa_data[i];
+	if(src_mac != NULL) {
+	  	// Get the MAC address
+		if (control_socket(socket, SIOCGIFHWADDR, &ifr) < 0) return -1;
+
+		for (int i = 0; i < 6; i++) {
+			*(src_mac + i) = ifr.ifr_hwaddr.sa_data[i];
+		}
 	}
 
 	return socket;
@@ -56,14 +60,8 @@ int init_interface (char *if_name, uint16_t eth_type, unsigned char *src_mac) {
  * 
  * Returns 0 if success or -1 if failure.
  */
-int end_interface (int sockfd) {
+int end_interface (int sockfd, char *if_name) {
 	if (sockfd < 0) return -1;
-
-	// Remove promisc. mode
-	struct ifreq promisc_req;
-	if(control_socket(sockfd, SIOCGIFFLAGS, &promisc_req) < 0) return -1;
-	promisc_req.ifr_flags &= ~IFF_PROMISC;
-	if(control_socket(sockfd, SIOCSIFFLAGS, &promisc_req) < 0) return -1;
 
 	// Close socket
 	close(sockfd);
