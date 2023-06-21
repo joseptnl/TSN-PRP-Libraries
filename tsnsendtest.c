@@ -7,7 +7,7 @@
 
 #define SLEEP 		200000 /* Temps entre trames (microsegons) */
 #define TOTALTIME 	60   /* Temps total de la prova en segons */
-#define NFRAMES		50	/* Trames sense replicacio que s'envien */
+#define NFRAMES		1	/* Trames sense replicacio que s'envien */
 
 #define N_IFS 2
 #define IF_1 "eth1"

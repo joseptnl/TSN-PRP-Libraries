@@ -1,7 +1,6 @@
 PRP_SEND_TEST_TARG = prpstest
-PRP_RECEIVE_TEST_TARG = prprtest
 TSN_SEND_TEST_TARG = tsnstest
-TSN_RECEIVE_TEST_TARG = tsnrtest
+RECEIVE_TEST_TARG = rtest
 
 all:
 	make $(PRP_SEND_TEST_TARG)
@@ -30,13 +29,13 @@ $(PRP_SEND_TEST_TARG): packetio.o generics.o prp.o ethframes.o sendtest.o
 sendtest.o: sendtest.c packetio.h ethframes.h
 	gcc -c -o $@ $<
 
-$(PRP_RECEIVE_TEST_TARG): packetio.o prpreceive.o generics.o receivetest.o
+$(RECEIVE_TEST_TARG): packetio.o log.o generics.o receivetest.o
 	gcc $^ -lpthread -o $@
 
-receivetest.o: receivetest.c prpreceive.h
+receivetest.o: receivetest.c log.h
 	gcc -c -o $@ $<
 
-prpreceive.o: prpreceive.c prpreceive.h
+log.o: log.c log.h
 	gcc -c -o $@ $<
 
 $(TSN_SEND_TEST_TARG): packetio.o generics.o tsn.o ethframes.o tsnsendtest.o

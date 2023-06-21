@@ -115,8 +115,10 @@ uint8_t prpSendFrame (uint16_t eth_t, char *dst_mac, char *data, uint16_t data_s
 }
 
 uint8_t prpEnd () {
-	if (end_interface(if_init_data[0].sockfd) < 0) return -1;
+	/*
+	if (end_interface(if_init_data[0].sockfd, if_init_data[0].) < 0) return -1;
 	if (end_interface(if_init_data[1].sockfd) < 0) return -1;
 
+	*/
 	return 0;
 }
