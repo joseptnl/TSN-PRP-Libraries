@@ -4,6 +4,7 @@ struct if_data
 {
 	int sockfd;
 	char src_mac[6];
+	char *name;
 };
 
 static struct if_data if_init_data[N_IFS];
@@ -83,6 +84,8 @@ void prpInit () {
 uint8_t prpConfig (char **if_name_list) {
 	for (int i = 0; i < N_IFS; i++) {
 		if((if_init_data[i].sockfd = init_interface(if_name_list[i], ETH_P_ALL, if_init_data[i].src_mac)) < 0) return INIT_IF_ERR;
+		if_init_data[i].name = (char *) calloc(IFNAMSIZ-1, 1);
+		strncpy(if_init_data[i].name, if_name_list[i], IFNAMSIZ-1);
 	}
 
 	if (check_macs(if_init_data[0].src_mac, if_init_data[1].src_mac) < 0) return DIFF_MACS_ERR;
@@ -115,10 +118,11 @@ uint8_t prpSendFrame (uint16_t eth_t, char *dst_mac, char *data, uint16_t data_s
 }
 
 uint8_t prpEnd () {
-	/*
-	if (end_interface(if_init_data[0].sockfd, if_init_data[0].) < 0) return -1;
-	if (end_interface(if_init_data[1].sockfd) < 0) return -1;
+	if (end_interface(if_init_data[0].sockfd, if_init_data[0].name) < 0) return -1;
+	if (end_interface(if_init_data[1].sockfd, if_init_data[1].name) < 0) return -1;
 
-	*/
+	free(if_init_data[0].name);
+	free(if_init_data[1].name);
+	
 	return 0;
 }

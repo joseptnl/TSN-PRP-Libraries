@@ -1,7 +1,5 @@
 #include "packetio.h"
 
-#include "net/core/dev.c"
-
 /**
  * Intilizes the interface binding it to a socket an obtaining
  * its mac address. Because the if is fullduplex the configuration
@@ -30,9 +28,6 @@ int init_interface (char *if_name, uint16_t eth_type, unsigned char *src_mac) {
     socket_address.sll_ifindex = if_nametoindex(if_name);
 	// Bind the interfaces with the opened sockets
 	if (bind_socket(socket, &socket_address) < 0) return -1;
-
-	rtnl_lock();
-	rtnl_unlock();
 	
 	// Set promiscuos mode
 	struct ifreq ifr;

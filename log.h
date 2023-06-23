@@ -1,3 +1,13 @@
+/**
+ * Author: Josep Antoni Naranjo Llompart
+ * 
+ * Auxiliar library to make a log with all the messages received
+ * through a concrete interface. You can choose to process TSN or
+ * PRP formated frames.
+ * 
+ * NOTE:
+ * Made for my tfg purposes.
+*/
 
 #include "packetio.h"
 
@@ -26,6 +36,7 @@ int config_interface (char *if_name);
 int configure_buffer (int max_n_of_frames);
 void log_init ();
 void set_log_type (uint8_t lt);
+int close_interface ();
 
 static void* writer ();
 static void* receiver ();
@@ -39,6 +50,5 @@ static void process_prp_frame (int nframe,
 static void process_tsn_frame (int nframe,
 		ssize_t *frame_size,
 		int64_t *frame_arrival_time,
-		uint8_t *priority,
 		uint8_t *is_frer,
 		uint16_t *frer_seq_num);

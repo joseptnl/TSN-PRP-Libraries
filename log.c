@@ -1,6 +1,12 @@
 /**
- * Auxiliar program to make a log with all the messages received
- * through a concrete interface.
+ * Author: Josep Antoni Naranjo Llompart
+ * 
+ * Auxiliar library to make a log with all the messages received
+ * through a concrete interface. You can choose to process TSN or
+ * PRP formated frames.
+ * 
+ * NOTE:
+ * Made for my tfg purposes.
 */
 
 #include "log.h"
@@ -12,7 +18,7 @@
 #define BUFF_FCELL_OFFSET BUFF_FSTART_OFFSET + MAX_BUF_SIZ
 
 #define VLAN_TAG_OFFSET BUFF_FSTART_OFFSET + 12
-#define R_TAG_OFFSET BUFF_FSTART_OFFSET + 16
+#define R_TAG_OFFSET BUFF_FSTART_OFFSET + 12
 
 static int configured = -1;
 static int writer_stop_condition = 1;
@@ -47,6 +53,11 @@ int config_interface (char *if_nam) {
 
 	configured = 1;
 
+	return 0;
+}
+
+int close_interface () {
+	if (end_interface(sockfd, if_name) < 0) return -1; 
 	return 0;
 }
 
@@ -116,6 +127,8 @@ static void* receiver () {
 		if (mac_filter(&frames_buffer[cell_start + buff_fstart_offset]) > 0) {
 			printf("[RECEIVER] %d: Size: %zd, Arrival time: %f.\n", count, *numbytes, ((double) *diff) / 1000);
 			sem_post(&mutex);
+		} else {
+			count -= 1;
 		}
 	}
 }
@@ -141,7 +154,6 @@ static void process_prp_frame (int nframe,
 static void process_tsn_frame (int nframe,
 		ssize_t *frame_size,
 		int64_t *frame_arrival_time,
-		uint8_t *priority,
 		uint8_t *is_frer,
 		uint16_t *frer_seq_num) {
 	// Set pointer to the start of the buffer cell
@@ -150,9 +162,6 @@ static void process_tsn_frame (int nframe,
 	*frame_size = *((ssize_t *) fcell_ptr);
 	// Get arrival time miliseconds
 	*frame_arrival_time = *((int64_t *)  (fcell_ptr + buff_fsize_offset));
-	// Get the seq number
-	*priority = *((uint8_t *) (fcell_ptr + buff_fsize_offset + vlan_tag_offset + 2));
-	printf("pcp : %x\n", *(fcell_ptr + buff_fsize_offset + vlan_tag_offset));
 	// Get the lan id content
 	uint16_t frer_const = ntohs(*((uint16_t *) (fcell_ptr + r_tag_offset)));
 	if (frer_const == 0xf1c1) {
@@ -161,20 +170,6 @@ static void process_tsn_frame (int nframe,
 	} else {
 		*is_frer = 0;
 		*frer_seq_num = 0;
-	}
-}
-static void show_frame (char *f) {
-	int cond = 1;
-	int counter = 0;
-	while (cond > 0) {
-		for (int i = 0; i < 16; i++) {
-			if (counter > MAX_BUF_SIZ) {
-				cond = 0; 
-				break;
-			}
-			printf("%x ", f[counter++]);
-		}
-		printf("\n");
 	}
 }
 
@@ -188,7 +183,7 @@ static void* writer () {
 	ssize_t frame_size;
 	int64_t frame_arrival_time;
 	uint32_t rct_seq_num;
-	uint8_t priority, is_frer;
+	uint8_t is_frer;
 	uint16_t frer_seq_num;
 
 	char lan_id;
@@ -216,11 +211,11 @@ static void* writer () {
 			// Write into file
 			fprintf(file, "%hhX, %zd, %f, %hd\n", lan_id, frame_size, ((double) frame_arrival_time) / 1000, ntohs(rct_seq_num));
 		} else {
-			//process_tsn_frame(count++, &frame_size, &frame_arrival_time, &priority, &is_frer, &frer_seq_num);
-			//printf("[WRITER] Size: %zd, Arrival time: %f, Priority: %hu, Is FRER frame: %hd, Seq Num: %hd.\n", frame_size, ((double) frame_arrival_time) / 1000, priority, is_frer, ntohs(frer_seq_num));
+			process_tsn_frame(count++, &frame_size, &frame_arrival_time, &is_frer, &frer_seq_num);
+			printf("[WRITER] Size: %zd, Arrival time: %f, Is FRER frame: %hd, Seq Num: %hd.\n", frame_size, ((double) frame_arrival_time) / 1000, is_frer, ntohs(frer_seq_num));
 			// Write into file
-			show_frame(&frames_buffer[(count++ % n_frames) * buff_fcell_offset]);
-			//fprintf(file, "%zd, %f, %hd, %hd, %hd\n", frame_size, ((double) frame_arrival_time) / 1000, priority, is_frer, ntohs(frer_seq_num));
+			//show_frame(&frames_buffer[(count++ % n_frames) * buff_fcell_offset]);
+			fprintf(file, "%zd, %f, %hd, %hd\n", frame_size, ((double) frame_arrival_time) / 1000, is_frer, ntohs(frer_seq_num));
 		}
 	}
 	// Close the previously opened file
