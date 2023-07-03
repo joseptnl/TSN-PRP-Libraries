@@ -52,3 +52,4 @@ static void process_tsn_frame (int nframe,
 		int64_t *frame_arrival_time,
 		uint8_t *is_frer,
 		uint16_t *frer_seq_num);
+void set_elapsed_time (uint8_t time);

@@ -33,6 +33,7 @@ static const unsigned int buff_ftime_offset = BUFF_FTIME_OFFSET;
 static const unsigned int vlan_tag_offset = VLAN_TAG_OFFSET;
 static const unsigned int r_tag_offset = R_TAG_OFFSET;
 
+static uint8_t elapsed_time = MAX_WAIT_TIME;
 static sem_t mutex, writer_sem;
 static char if_name[IFNAMSIZ];
 static int sockfd;
@@ -78,6 +79,10 @@ int configure_buffer (int max_n_of_frames) {
 
 void set_log_type (uint8_t lt) {
 	log_type = lt;
+}
+
+void set_elapsed_time (uint8_t time) {
+	elapsed_time = time;
 }
 
 // Calculates the difference between timespecs (miliseconds)
@@ -223,7 +228,7 @@ static void* writer () {
 }
 
 static void* timeout_manager () {
-	sleep(MAX_WAIT_TIME);
+	sleep(elapsed_time);
 	pthread_cancel(threadId[1]);
 	sem_wait(&writer_sem);
 	writer_stop_condition = -1;

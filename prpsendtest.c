@@ -14,10 +14,6 @@
 #define PAYLOAD_SZ	700
 #define PRIORITY	5
 
-#define N_IFS 2
-#define IF_1 "eth1"
-#define IF_2 "eth2"
-
 #define MY_DEST_MAC0	0x01
 #define MY_DEST_MAC1	0x02
 #define MY_DEST_MAC2	0x03
@@ -100,7 +96,7 @@ int main (int argc, char *argv[]) {
 
 	for (int i = 0; i < NFRAMES; i++) {
 		prpSendFrame(0x8000, ifdstmac, content, payload_sz);
-		usleep(SLEEP);
+		usleep(interval);
 	}
 
 	prpEnd();

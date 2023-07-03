@@ -110,7 +110,7 @@ int main (int argc, char *argv[]) {
 
 	for (int i = 0; i < n_frames; i++) {
 		tsnSendFrame(is_frer, 0x8000, ifdstmac, priority, content, payload_sz);
-		usleep(SLEEP);
+		usleep((__useconds_t) interval);
 	}
 
 	tsnEnd();
