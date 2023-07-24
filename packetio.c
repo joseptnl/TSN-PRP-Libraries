@@ -80,9 +80,9 @@ int end_interface (int sockfd, char *if_name) {
  * Returns number of bytes sended if success or -1 if failure.
 */
 uint64_t send_frame (int sockfd, char *frame, uint16_t frame_len) {
-	uint64_t res = 0;
+	int64_t res = 0;
 
-	if ((res = write(sockfd, (void *) frame, (size_t) frame_len)) < 0) {
+	if ((res = (int64_t) write(sockfd, (void *) frame, (size_t) frame_len)) < 0) {
 		printf("[Send failed] Due to: %s \n", strerror(errno));
 	}
 

@@ -17,6 +17,8 @@
 #define FRER_MAX_PAYLOAD_SIZ 1500 // Payload size
 #define MIN_PAYLOAD_SIZ 46
 
+#define TSN_ETH_PROTOCOL 0x8100
+
 
 static char *craft_tsn_frame(
 	uint8_t frer,

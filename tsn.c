@@ -65,7 +65,7 @@ uint8_t tsnConfig (char **if_name_list, uint8_t ifs_num) {
 	if_init_data = (struct if_data *) calloc(ifs_num, sizeof(struct if_data));
 
 	for (int i = 0; i < n_ifs; i++) {
-		if((if_init_data[i].sockfd = init_interface(if_name_list[i], ETH_P_ALL, if_init_data[i].src_mac)) < 0) return INIT_IF_ERR;
+		if((if_init_data[i].sockfd = init_interface(if_name_list[i], TSN_ETH_PROTOCOL, if_init_data[i].src_mac)) < 0) return INIT_IF_ERR;
 		if_init_data[i].name = (char *) calloc(IFNAMSIZ-1, 1);
 		strncpy(if_init_data[i].name, if_name_list[i], IFNAMSIZ-1);
 	}

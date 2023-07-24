@@ -94,7 +94,7 @@ int main (int argc, char *argv[]) {
 	ifdstmac[4] = MY_DEST_MAC4;
 	ifdstmac[5] = MY_DEST_MAC5;
 
-	for (int i = 0; i < NFRAMES; i++) {
+	for (int i = 0; i < n_frames; i++) {
 		prpSendFrame(0x8000, ifdstmac, content, payload_sz);
 		usleep(interval);
 	}

@@ -13,7 +13,7 @@
 #define N_IFS 2
 #define MAX_FRAME_SIZ 1514   // Frame size (without CRC)
 #define MAX_PAYLOAD_SIZ 1500 // Payload size
-#define MIN_PAYLOAD_SIZ 64
+#define MIN_PAYLOAD_SIZ 46
 #define RCT_SIZE 4
 
 static char *craft_prp_frame(
