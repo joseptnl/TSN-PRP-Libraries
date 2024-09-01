@@ -1,22 +1,19 @@
 # TSN-Libraries
-
-## Instructions for pushing
-
-### .gitignore
-
-For pushing into the repo make sure you have a .gitignore file with at least the following content:
-
-```
-# To ignore
+The library can be used to send a batch of k Ethernet frames. All the frames of the same batch belong to the same Ethernet standard. The standars can be:
+* Parallel Redundancy Protocol (PRP)
+* Time Sensitive Networking (TSN): The frames can be sent using an R-tag that is identified by the FRER mechanism to add FT capabilities.
+Additionally, the library provides a logging feature to listen a particular NIC and create a logging file with all the enregistered activity.
+## Use
+First you should make sure the directory is cleared of compiled files. Then, you can use the *make* command with the parameters listed bellow:
+* 
 *
-
-# Not to ignore
-!*.c
-!*.h
-!*.md
-!makefile
-```
-
-For any other files you want the .gitignore not to ignore add their definition into the **Not to ignore** section.
-
-## Library structure
+*
+## Structure
+The library has a Layers Architecture. The internal layers are:
+* generics: Hiddes direct interaction with Linux OS functions using sockets.
+* packetio: Avoids the need to know the socket concept, allowing the developer to work with NICs directly.
+* ethframes: Providers function utils to build the Ethernet frames.
+Above the internal layers there are the application layers:
+* tsn: Hiddes logic of sending a copy of each frame through k NICs
+* prp: Hiddes logic of sending a copy of each frame through 2 NICs
+* log: Listen a particular NIC and stores representative data from each received frame in a file named as the NIC's name.
