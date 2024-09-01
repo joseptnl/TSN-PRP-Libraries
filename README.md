@@ -13,6 +13,8 @@ First you should make sure the directory is cleared of compiled files. Then, you
 * tsnstest: Send tsn frames
 * rtest: Receive frames.
 
+For each one of the scripts generated, check their params.
+
 ## Structure
 
 The library has a Layers Architecture. The internal layers are:
